@@ -198,23 +198,9 @@ class UpdateChecker(private val context: Context) {
 
             if (uri != null) {
                 val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                        // Android 7.0+ requires FileProvider
-                        val file = File(Environment.getExternalStoragePublicDirectory(
-                            Environment.DIRECTORY_DOWNLOADS
-                        ), "yessfish-update.apk")
-
-                        val contentUri = FileProvider.getUriForFile(
-                            context,
-                            "${context.packageName}.fileprovider",
-                            file
-                        )
-                        setDataAndType(contentUri, "application/vnd.android.package-archive")
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    } else {
-                        setDataAndType(uri, "application/vnd.android.package-archive")
-                    }
+                    setDataAndType(uri, "application/vnd.android.package-archive")
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
 
                 context.startActivity(installIntent)
