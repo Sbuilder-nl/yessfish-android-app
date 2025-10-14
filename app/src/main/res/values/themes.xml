@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base application theme -->
+    <style name="Theme.YessFish" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <!-- Primary brand color -->
+        <item name="colorPrimary">@color/yessfish_blue</item>
+        <item name="colorPrimaryVariant">@color/yessfish_blue_dark</item>
+        <item name="colorOnPrimary">@color/white</item>
+
+        <!-- Secondary brand color -->
+        <item name="colorSecondary">@color/yessfish_purple</item>
+        <item name="colorSecondaryVariant">@color/yessfish_purple_dark</item>
+        <item name="colorOnSecondary">@color/white</item>
+
+        <!-- Status bar color -->
+        <item name="android:statusBarColor">@color/yessfish_blue</item>
+
+        <!-- Navigation bar color -->
+        <item name="android:navigationBarColor">@color/yessfish_blue</item>
+    </style>
+
+    <!-- Splash screen theme -->
+    <style name="Theme.YessFish.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/yessfish_blue</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="windowSplashScreenAnimationDuration">500</item>
+        <item name="postSplashScreenTheme">@style/Theme.YessFish</item>
+        <item name="android:statusBarColor">@color/yessfish_blue</item>
+        <item name="android:navigationBarColor">@color/yessfish_blue</item>
+    </style>
+</resources>

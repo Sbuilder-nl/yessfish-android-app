@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">YessFish</string>
+    <string name="tagline">Your Fishing Companion</string>
+
+    <!-- Permissions -->
+    <string name="location_permission_rationale">YessFish gebruikt je locatie om visplekken in de buurt te vinden en check-ins mogelijk te maken.</string>
+    <string name="camera_permission_rationale">YessFish heeft camera toegang nodig om foto\'s van je vangsten te maken.</string>
+
+    <!-- Errors -->
+    <string name="error_no_internet">Geen internetverbinding</string>
+    <string name="error_loading_page">Fout bij laden van pagina</string>
+    <string name="error_generic">Er is iets misgegaan</string>
+
+    <!-- Actions -->
+    <string name="retry">Opnieuw proberen</string>
+    <string name="ok">OK</string>
+    <string name="cancel">Annuleren</string>
+</resources>
