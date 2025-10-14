@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.webkit.*
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -13,6 +14,8 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
@@ -26,6 +29,27 @@ class MainActivity : AppCompatActivity() {
 
         setupWebView()
         loadYessFish()
+        checkForUpdates()
+    }
+
+    /**
+     * Check for app updates
+     */
+    private fun checkForUpdates() {
+        lifecycleScope.launch {
+            try {
+                val updateChecker = UpdateChecker(this@MainActivity)
+                val versionInfo = updateChecker.checkForUpdates()
+
+                if (versionInfo != null && updateChecker.isUpdateAvailable(versionInfo)) {
+                    updateChecker.showUpdateDialog(versionInfo) {
+                        updateChecker.downloadAndInstallUpdate(versionInfo)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("YessFish", "Update check failed: ${e.message}")
+            }
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
