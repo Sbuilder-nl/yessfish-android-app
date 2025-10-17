@@ -44,6 +44,12 @@ case "`uname`" in
     ;;
 esac
 
+# Determine the script's directory (APP_HOME)
+SAVED="`pwd`"
+cd "`dirname \"$0\"`"
+APP_HOME="`pwd -P`"
+cd "$SAVED"
+
 CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
 
 # Determine the Java command to use to start the JVM.

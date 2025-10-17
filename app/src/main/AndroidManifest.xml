@@ -62,6 +62,11 @@
             </intent-filter>
         </activity>
 
+        <!-- Google Maps API Key -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyBL4H2nr5TElITXYIhAuYFYUlmY_J96L2k" />
+
         <!-- Main Activity -->
         <activity
             android:name=".MainActivity"
@@ -69,6 +74,14 @@
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize"
             android:launchMode="singleTask">
+
+            <!-- Custom URL scheme for OAuth callback -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="yessfish" />
+            </intent-filter>
 
             <!-- Deep linking support -->
             <intent-filter android:autoVerify="true">
@@ -80,6 +93,14 @@
                     android:host="yessfish.com" />
             </intent-filter>
         </activity>
+
+        <!-- Native Fishmap Activity -->
+        <activity
+            android:name=".FishmapActivity"
+            android:exported="false"
+            android:label="Viskaart"
+            android:theme="@style/Theme.YessFish"
+            android:configChanges="orientation|screenSize" />
 
         <!-- File Provider voor camera/gallery -->
         <provider

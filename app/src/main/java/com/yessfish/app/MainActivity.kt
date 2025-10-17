@@ -2,6 +2,7 @@ package com.yessfish.app
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -28,6 +29,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private val LOCATION_PERMISSION_REQUEST_CODE = 100
     private val CAMERA_PERMISSION_REQUEST_CODE = 101
+    private var isOAuthInProgress = false  // Track when OAuth login is active
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,15 +39,97 @@ class MainActivity : AppCompatActivity() {
         enableFullscreenMode()
 
         setupWebView()
+
+        // Enable persistent cookies (stay logged in) - AFTER webView is initialized
+        enablePersistentCookies()
+
+        // Check if opened via custom URL scheme (OAuth callback)
+        handleIntent(intent)
+
         loadYessFish()
         checkForUpdates()
     }
 
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        val data = intent?.data
+        if (data != null && data.scheme == "yessfish") {
+
+            when (data.host) {
+                "oauth-success" -> {
+                    // OAuth succeeded! Get login token from URL
+                    val token = data.getQueryParameter("token")
+
+                    if (token != null) {
+                        // Exchange token for session in WebView
+                        android.util.Log.d("YessFish", "Got OAuth token: ${token.substring(0, 8)}...")
+
+                        Toast.makeText(this, "✅ Inloggen gelukt!", Toast.LENGTH_SHORT).show()
+
+                        // Wait a moment for Custom Tab to close
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            // First: Exchange token for session (this creates session in WebView)
+                            val exchangeUrl = "${BuildConfig.BASE_URL}/api/exchange-token.php?token=$token"
+
+                            webView.loadUrl(exchangeUrl, getCustomHeaders())
+
+                            // After token exchange, redirect to dashboard
+                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                val dashboardUrl = "${BuildConfig.BASE_URL}/dashboard.php"
+                                webView.loadUrl(dashboardUrl, getCustomHeaders())
+                            }, 1000) // Wait 1 second for token exchange
+                        }, 300)
+                    } else {
+                        // No token (old flow) - just load dashboard
+                        android.util.Log.w("YessFish", "No OAuth token received")
+                        Toast.makeText(this, "⚠️ Login zonder token", Toast.LENGTH_SHORT).show()
+
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            val dashboardUrl = "${BuildConfig.BASE_URL}/dashboard.php"
+                            webView.loadUrl(dashboardUrl, getCustomHeaders())
+                        }, 300)
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Enable persistent cookies to keep users logged in
+     * Cookies persist across app restarts AND UPDATES
+     */
+    private fun enablePersistentCookies() {
+        val cookieManager = android.webkit.CookieManager.getInstance()
+        cookieManager.setAcceptCookie(true)
+        cookieManager.setAcceptThirdPartyCookies(webView, true)
+
+        // CRITICAL: DO NOT remove session cookies - keep everything
+        // This ensures cookies survive app updates
+
+        // Flush cookies to storage immediately
+        cookieManager.flush()
+
+        android.util.Log.d("YessFish", "✅ Persistent cookies enabled - cookies will survive updates")
+    }
+
     /**
      * Enable fullscreen immersive mode
-     * Hides system UI (status bar, navigation bar)
+     * Hides system UI (status bar, navigation bar) - WebView has NO URL bar by default
      */
     private fun enableFullscreenMode() {
+
+        // CRITICAL: Remove action bar / title bar
+        supportActionBar?.hide()
+
+        // Enable fullscreen and hide decorations
+        window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        window.addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
+
         // For edge-to-edge experience
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
@@ -53,7 +137,13 @@ class MainActivity : AppCompatActivity() {
             // Android 11 (API 30) and above
             window.setDecorFitsSystemWindows(false)
             window.insetsController?.let { controller ->
-                controller.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                // Hide both status bar and navigation bar
+                controller.hide(
+                    WindowInsets.Type.statusBars() or
+                    WindowInsets.Type.navigationBars() or
+                    WindowInsets.Type.systemBars()
+                )
+                // Stay in immersive mode even after user swipes
                 controller.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
         } else {
@@ -71,6 +161,7 @@ class MainActivity : AppCompatActivity() {
 
         // Keep screen on while app is active
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
     }
 
     /**
@@ -99,11 +190,11 @@ class MainActivity : AppCompatActivity() {
 
         // WebView Settings
         webView.settings.apply {
-            // JavaScript
+            // JavaScript (CRITICAL for Google Maps)
             javaScriptEnabled = true
             javaScriptCanOpenWindowsAutomatically = true
 
-            // DOM Storage
+            // DOM Storage (CRITICAL for Google Maps)
             domStorageEnabled = true
             databaseEnabled = true
 
@@ -123,16 +214,34 @@ class MainActivity : AppCompatActivity() {
             useWideViewPort = true
             loadWithOverviewMode = true
 
-            // Mixed content (allow HTTPS to load)
-            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            // Mixed content - ALLOW for Google Maps compatibility
+            mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
 
-            // Geolocation
+            // Geolocation (CRITICAL for Google Maps location features)
             setGeolocationEnabled(true)
 
             // File access
             allowFileAccess = true
             allowContentAccess = true
+
+            // Allow file access from file URLs (for Google Maps markers/icons)
+            @Suppress("DEPRECATION")
+            allowFileAccessFromFileURLs = true
+            @Suppress("DEPRECATION")
+            allowUniversalAccessFromFileURLs = true
         }
+
+        // CRITICAL: Set custom User-Agent for app detection
+        val versionName = try {
+            packageManager.getPackageInfo(packageName, 0).versionName
+        } catch (e: Exception) {
+            "1.0.0"
+        }
+        // Use YessFish-Android User-Agent so server can detect the app
+        val customUA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Mobile Safari/537.36 YessFish-Android/$versionName"
+        webView.settings.userAgentString = customUA
+
+        android.util.Log.d("YessFish", "User-Agent set to: $customUA")
 
         // Enable safe browsing (disabled for debug builds to prevent login issues)
         if (WebViewFeature.isFeatureSupported(WebViewFeature.SAFE_BROWSING_ENABLE)) {
@@ -145,9 +254,17 @@ class MainActivity : AppCompatActivity() {
         webView.webViewClient = object : WebViewClient() {
 
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                val url = request?.url?.toString() ?: return false
+                val url = request?.url?.toString() ?: return true
 
-                // Google OAuth URLs moeten in Chrome Custom Tabs openen (niet in WebView)
+                // Fishmap URLs should open native maps activity
+                if (url.contains("fishmap.php") || url.contains("/fishmap")) {
+                    val intent = Intent(this@MainActivity, FishmapActivity::class.java)
+                    startActivity(intent)
+                    return true
+                }
+
+                // Google OAuth URLs must open in Chrome Custom Tab
+                // (Google blocks OAuth in embedded WebViews for security)
                 if (url.contains("accounts.google.com") ||
                     url.contains("google.com/o/oauth2") ||
                     url.contains("googleapis.com/oauth")) {
@@ -156,28 +273,38 @@ class MainActivity : AppCompatActivity() {
                     return true
                 }
 
-                // Only handle yessfish.com URLs in the app
+                // YessFish URLs: Let WebView handle it normally (don't reload)
+                // App detection works via User-Agent and cookie injection
                 if (url.contains("yessfish.com")) {
-                    view?.loadUrl(url, getCustomHeaders())
-                    return true
+                    return false  // FALSE = let WebView handle navigation normally
                 }
 
-                // External URLs open in browser
-                return false
+                // Block all other external URLs
+                return true
             }
 
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
-                // Add custom headers to ALL requests to yessfish.com
-                if (request?.url?.host?.contains("yessfish.com") == true) {
-                    val headers = request.requestHeaders.toMutableMap()
-                    headers.putAll(getCustomHeaders())
-                }
+                // Custom headers are now injected via loadUrl() with headers
                 return super.shouldInterceptRequest(view, request)
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
-                // Page loaded successfully
+
+                // CRITICAL 1: Inject app detection cookie via JavaScript
+                // This ensures the server ALWAYS knows we're in the Android app
+                if (url?.contains("yessfish.com") == true) {
+                    view?.evaluateJavascript("""
+                        document.cookie = 'yessfish_android_app=true; path=/; max-age=31536000; secure; samesite=none';
+                        console.log('[YessFish App] Cookie injected: yessfish_android_app=true');
+                    """.trimIndent(), null)
+                }
+
+                // CRITICAL 2: Force flush cookies after EVERY page load
+                // This ensures session cookies are saved immediately
+                android.webkit.CookieManager.getInstance().flush()
+
+                android.util.Log.d("YessFish", "Page finished: $url - cookie injected & flushed")
             }
 
             override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
@@ -229,8 +356,18 @@ class MainActivity : AppCompatActivity() {
             // Console messages for debugging
             override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
                 consoleMessage?.let {
-                    android.util.Log.d("WebView", "${it.message()} -- From line ${it.lineNumber()} of ${it.sourceId()}")
+                    val tag = when (it.messageLevel()) {
+                        ConsoleMessage.MessageLevel.ERROR -> "WebView-ERROR"
+                        ConsoleMessage.MessageLevel.WARNING -> "WebView-WARN"
+                        else -> "WebView-INFO"
+                    }
                 }
+                return true
+            }
+
+            // JavaScript Alert/Confirm dialogs
+            override fun onJsAlert(view: WebView?, url: String?, message: String?, result: android.webkit.JsResult?): Boolean {
+                result?.confirm()
                 return true
             }
         }
@@ -257,9 +394,26 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadYessFish() {
-        // Start at root - server will detect Android headers and route appropriately
-        // User logs in first, then server can redirect to fishmap-android.php
-        val url = BuildConfig.BASE_URL
+        // Check if user has session cookie - if yes, load dashboard directly
+        val cookieManager = android.webkit.CookieManager.getInstance()
+        val cookies = cookieManager.getCookie("yessfish.com") ?: ""
+
+        // Check for session cookies (YESSFISH_SID or remember_me)
+        val hasSessionCookie = cookies.contains("YESSFISH_SID=") &&
+                              !cookies.contains("YESSFISH_SID=deleted") &&
+                              cookies.split("YESSFISH_SID=").getOrNull(1)?.takeWhile { it != ';' }?.isNotEmpty() == true
+
+        // If user has valid session, go directly to dashboard
+        // Otherwise go to login page
+        val url = if (hasSessionCookie) {
+            android.util.Log.d("YessFish", "✅ Valid session found - loading dashboard")
+            "${BuildConfig.BASE_URL}/dashboard.php"
+        } else {
+            android.util.Log.d("YessFish", "❌ No session - loading login page")
+            "${BuildConfig.BASE_URL}/login.php"
+        }
+
+        android.util.Log.d("YessFish", "Cookies: $cookies")
         webView.loadUrl(url, getCustomHeaders())
     }
 
@@ -269,13 +423,24 @@ class MainActivity : AppCompatActivity() {
      */
     private fun openInCustomTab(url: String) {
         try {
+            isOAuthInProgress = true  // Set flag - we're doing OAuth login
+
+            // CRITICAL: Set cookie BEFORE opening Custom Tab
+            // This allows the OAuth callback to detect Android app
+            android.webkit.CookieManager.getInstance().apply {
+                setAcceptCookie(true)
+                setAcceptThirdPartyCookies(webView, true)
+                setCookie("yessfish.com", "yessfish_android_app=true; path=/; max-age=31536000")
+                flush()
+            }
+
             val customTabsIntent = CustomTabsIntent.Builder()
                 .setShowTitle(true)
                 .build()
             customTabsIntent.launchUrl(this, Uri.parse(url))
         } catch (e: Exception) {
             // Fallback: open in external browser
-            android.util.Log.e("YessFish", "Failed to open Custom Tab: ${e.message}")
+            isOAuthInProgress = false
             Toast.makeText(this, "Opening in browser...", Toast.LENGTH_SHORT).show()
         }
     }
@@ -367,6 +532,19 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         webView.onPause()
+
+        // CRITICAL: Force flush cookies when app goes to background
+        // This ensures session persists if Android kills the app
+        android.webkit.CookieManager.getInstance().flush()
+        android.util.Log.d("YessFish", "onPause - cookies flushed to disk")
+    }
+
+    override fun onStop() {
+        super.onStop()
+
+        // Double-flush cookies when app fully stops
+        android.webkit.CookieManager.getInstance().flush()
+        android.util.Log.d("YessFish", "onStop - cookies flushed to disk")
     }
 
     override fun onResume() {
@@ -374,6 +552,21 @@ class MainActivity : AppCompatActivity() {
         webView.onResume()
         // Re-enable fullscreen mode when app resumes
         enableFullscreenMode()
+
+        // CRITICAL: Only reload if WebView is truly empty (not just empty URL)
+        // WebView can have content but empty URL after process restart
+        val currentUrl = webView.url ?: ""
+        val hasContent = webView.progress > 0 || currentUrl.contains("yessfish.com")
+
+        android.util.Log.d("YessFish", "onResume - URL: $currentUrl, progress: ${webView.progress}, hasContent: $hasContent")
+
+        // Only reload if WebView is completely empty (fresh start or killed by system)
+        if (currentUrl.isEmpty() || currentUrl == "about:blank") {
+            android.util.Log.d("YessFish", "WebView empty - reloading app")
+            loadYessFish()
+        } else {
+            android.util.Log.d("YessFish", "WebView has content - not reloading")
+        }
     }
 
     override fun onDestroy() {

@@ -158,7 +158,7 @@ class UpdateChecker(private val context: Context) {
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 .setDestinationInExternalPublicDir(
                     Environment.DIRECTORY_DOWNLOADS,
-                    "yessfish-update-${versionInfo.latestVersion}.apk"
+                    "yessfish-update.apk"
                 )
                 .setAllowedOverMetered(true)
                 .setAllowedOverRoaming(false)
@@ -195,30 +195,26 @@ class UpdateChecker(private val context: Context) {
     private fun installUpdate(downloadManager: DownloadManager, downloadId: Long) {
         try {
             val uri = downloadManager.getUriForDownloadedFile(downloadId)
+            Log.i(TAG, "Downloaded file URI: $uri")
 
             if (uri != null) {
-                val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                        // Android 7.0+ requires FileProvider
-                        val file = File(Environment.getExternalStoragePublicDirectory(
-                            Environment.DIRECTORY_DOWNLOADS
-                        ), "yessfish-update.apk")
-
-                        val contentUri = FileProvider.getUriForFile(
-                            context,
-                            "${context.packageName}.fileprovider",
-                            file
-                        )
-                        setDataAndType(contentUri, "application/vnd.android.package-archive")
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    } else {
+                val installIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    // Android 7.0+ use content:// URI directly from DownloadManager
+                    Intent(Intent.ACTION_VIEW).apply {
                         setDataAndType(uri, "application/vnd.android.package-archive")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                } else {
+                    // Pre-Nougat use file:// URI
+                    Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, "application/vnd.android.package-archive")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
                 }
 
                 context.startActivity(installIntent)
-                Log.i(TAG, "Install intent started")
+                Log.i(TAG, "Install intent started successfully")
             } else {
                 Log.e(TAG, "Download URI is null")
                 showErrorDialog("Installatie mislukt. Download opnieuw.")
